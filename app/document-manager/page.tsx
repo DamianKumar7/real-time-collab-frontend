@@ -64,7 +64,7 @@ export default function DocumentManager() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`, // Add token to create request
         },
-        body: JSON.stringify({ title: 'New Document', content: '' }),
+        body: JSON.stringify({ title: 'New Document', content: '', version: 1 }),
       });
 
       if (!response.ok) throw new Error('Failed to create document');

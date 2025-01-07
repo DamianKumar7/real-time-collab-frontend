@@ -1,7 +1,7 @@
 // components/document-editor.tsx
 
-import { useState, useEffect, useCallback } from 'react';
-import { User} from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { User } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { DocumentEvent } from '@/types';
@@ -9,131 +9,155 @@ import { DocumentEvent } from '@/types';
 interface DocumentEditorProps {
     docId: string;
     initialContent?: string;
-    key?: string; // Add key prop type
 }
 
 export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorProps) {
     const [content, setContent] = useState(initialContent);
     const [version, setVersion] = useState(0);
-    const [status, setStatus] = useState('connecting');
-    const [ws, setWs] = useState<WebSocket | null>(null);
+    const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
     const userId = localStorage.getItem('userId') || 'default';
+    const wsRef = useRef<WebSocket | null>(null); // Ref to persist WebSocket instance
+
+    // Logging helper
+    const log = (message: string, ...data: any[]) => {
+        console.log(`[DocumentEditor][docId=${docId}] ${message}`, ...data);
+    };
 
     // Reset content when initialContent changes
     useEffect(() => {
         setContent(initialContent);
+        log('Initial content set', { initialContent });
     }, [initialContent]);
 
+    // Establish WebSocket connection once
     useEffect(() => {
-        let isSubscribed = true;
-        // Close existing WebSocket connection before creating a new one
-        if (ws) {
-            ws.close();
+        if (!wsRef.current) {
+            log('Initializing WebSocket connection...');
+            const websocket = new WebSocket(`ws://localhost:8080/ws`);
+            wsRef.current = websocket;
+
+            websocket.onopen = () => {
+                log('WebSocket connection opened');
+                setStatus('connecting');
+                sendMessage({
+                    operation: 'join',
+                    position: 0,
+                    length: 0,
+                    content: '',
+                    version,
+                });
+            };
+
+            websocket.onmessage = (event) => {
+                log('Received WebSocket message', event.data);
+                try {
+                    const data: DocumentEvent = JSON.parse(event.data);
+                    if (data.content !== undefined) {
+                        setContent(data.content);
+                        log('Content updated from server', { content: data.content });
+                    }
+                    if (data.version !== undefined) {
+                        setVersion(data.version);
+                        log('Version updated from server', { version: data.version });
+                    }
+                    setStatus('connected');
+                } catch (error) {
+                    console.error(`[DocumentEditor][docId=${docId}] Error processing WebSocket message`, error);
+                }
+            };
+
+            websocket.onerror = (error) => {
+                console.error(`[DocumentEditor][docId=${docId}] WebSocket error`, error);
+                setStatus('disconnected');
+                websocket.close();
+                wsRef.current = null;
+            };
+
+            websocket.onclose = (event) => {
+                log('WebSocket connection closed', { code: event.code, reason: event.reason });
+                setStatus('disconnected');
+                wsRef.current = null;
+            };
+
+            return () => {
+                log('Cleaning up WebSocket connection...');
+                websocket.close();
+                wsRef.current = null;
+            };
+        } else {
+            log('WebSocket connection already established');
         }
+    }, [docId]); // Only recreate WebSocket when `docId` changes
 
-        const websocket = new WebSocket(`ws://localhost:8080/ws`);
-
-        websocket.onopen = () => {
-            if (!isSubscribed) return;
-            setStatus('connecting'); // Set to connecting while joining
-            websocket.send(JSON.stringify({
-                doc_id: docId,
-                user_id: userId,
-                operation: "join",
-                position: 0,
-                length: 0,
-                content: "",
-                version: version,
-                timestamp: new Date().toISOString()
-            }));
-        };
-
-        websocket.onclose = () => {
-            if (!isSubscribed) return;
-            setStatus('disconnected');
-        };
-
-        websocket.onmessage = (event) => {
-            if (!isSubscribed) return;
-            try {
-                const data: DocumentEvent = JSON.parse(event.data);
-                if (data.content !== undefined) {
-                    setContent(data.content);
-                }
-                if (data.version !== undefined) {
-                    setVersion(data.version);
-                }
-                // Set connected status after successful join
-                setStatus('connected');
-            } catch (error) {
-                console.error('Error processing message:', error);
+    const sendMessage = useCallback(
+        (event: Partial<DocumentEvent>) => {
+            const websocket = wsRef.current;
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                log('WebSocket not ready, skipping message send', { event });
+                return;
             }
-        };
 
-        websocket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            setStatus('disconnected');
-        };
+            log('Sending WebSocket message', { event });
+            websocket.send(
+                JSON.stringify({
+                    id: '0',
+                    doc_id: docId,
+                    user_id: userId,
+                    timestamp: new Date().toISOString(),
+                    ...event,
+                })
+            );
+        },
+        [docId, userId]
+    );
 
-        setWs(websocket);
-
-        return () => {
-            isSubscribed = false;
-            websocket.close();
-        };
-    }, [docId]); // Recreate WebSocket connection when docId changes
-
-    const sendChange = useCallback((operation: string, position: number, length: number = 0, content: string = '') => {
-        if (!ws) return;
-
-        const event: DocumentEvent = {
-            id: '0',
-            doc_id: docId.toString(),
-            user_id: userId,
-            operation: operation,
-            position: position,
-            length: length,
-            content: content,
-            version: version,
-            timestamp: new Date().toISOString()
-        };
-
-        ws.send(JSON.stringify(event));
-    }, [ws, docId, userId, version]);
+    const sendChange = useCallback(
+        (operation: string, position: number, length: number = 0, content: string = '') => {
+            log('Preparing to send change event', { operation, position, length, content });
+            sendMessage({ operation, position, length, content, version });
+        },
+        [sendMessage, version]
+    );
 
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const newContent = e.target.value;
         const diff = findDiff(content, newContent);
-        
+
         if (diff) {
+            log('Detected content difference', { diff });
             sendChange(diff.operation, diff.position, diff.length, diff.content);
         }
-        
+
         setContent(newContent);
+        log('Content updated locally', { newContent });
     };
 
     const findDiff = (oldContent: string, newContent: string) => {
         if (oldContent === newContent) return null;
-        
+
         let i = 0;
         while (i < oldContent.length && i < newContent.length && oldContent[i] === newContent[i]) {
             i++;
         }
-        
+
         if (newContent.length > oldContent.length) {
-            return {
+            const diff = {
                 operation: 'insert',
                 position: i,
                 length: 0,
-                content: newContent.slice(i, i + (newContent.length - oldContent.length))
+                content: newContent.slice(i),
             };
+            log('Detected insert operation', { diff });
+            return diff;
         } else {
-            return {
+            const diff = {
                 operation: 'delete',
                 position: i,
                 length: oldContent.length - newContent.length,
-                content: ''
+                content: '',
             };
+            log('Detected delete operation', { diff });
+            return diff;
         }
     };
 
@@ -147,14 +171,14 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
                             <User className="h-4 w-4" />
                             <span>{userId}</span>
                         </div>
-                        <div className={`h-2 w-2 rounded-full ${
-                            status === 'connected' ? 'bg-green-500' : 'bg-red-500'
-                        }`} />
+                        <div
+                            className={`h-2 w-2 rounded-full ${
+                                status === 'connected' ? 'bg-green-500' : 'bg-red-500'
+                            }`}
+                        />
                     </div>
                 </div>
-                <div className="text-sm text-gray-500">
-                    Version: {version}
-                </div>
+                <div className="text-sm text-gray-500">Version: {version}</div>
             </CardHeader>
             <CardContent className="h-[calc(100%-4rem)]">
                 {status === 'connected' ? (
@@ -167,7 +191,9 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
                 ) : (
                     <Alert>
                         <AlertDescription>
-                            {status === 'connecting' ? 'Connecting to server...' : 'Failed to connect to server'}
+                            {status === 'connecting'
+                                ? 'Connecting to server...'
+                                : 'Failed to connect to server'}
                         </AlertDescription>
                     </Alert>
                 )}

@@ -78,15 +78,17 @@ export default function DocumentManager() {
   const handleDocumentSelect = async (docId: string) => {
     if (!token) return; // Prevent selection if token is not set yet
 
-    try {
-      const response = await fetch(`http://localhost:8080/documents/get/${docId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      try {
+        console.log("Trying to get the document by id")
+        const response = await fetch(`http://localhost:8080/documents/get/${docId}`, {
+            method: 'GET',
+            headers: {
+            'Authorization': `Bearer ${token}`,
+            },
+        });
       if (!response.ok) throw new Error('Failed to retrieve document');
-      const data: DocumentModel = await response.json();
+          const data: DocumentModel = await response.json();
+          console.log(data)
       setSelectedDocument(data);
     } catch (error) {
       console.error(error);
@@ -137,9 +139,10 @@ export default function DocumentManager() {
           <CardContent className="p-0 h-full">
             {selectedDocument ? (
               <DocumentEditor
-                docId={selectedDocument.ID}
-                initialContent={selectedDocument.content}
-              />
+                    key={selectedDocument.ID} // Add this line
+                    docId={selectedDocument.ID}
+                    initialContent={selectedDocument.content}
+            />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
                 <p>No document selected</p>

@@ -9,6 +9,7 @@ import { DocumentEvent } from '@/types';
 interface DocumentEditorProps {
     docId: string;
     initialContent?: string;
+    key?: string; // Add key prop type
 }
 
 export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorProps) {
@@ -16,12 +17,25 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
     const [version, setVersion] = useState(0);
     const [status, setStatus] = useState('connecting');
     const [ws, setWs] = useState<WebSocket | null>(null);
-    const userId = localStorage.getItem('userId') || 'default'
+    const userId = localStorage.getItem('userId') || 'default';
+
+    // Reset content when initialContent changes
+    useEffect(() => {
+        setContent(initialContent);
+    }, [initialContent]);
 
     useEffect(() => {
+        let isSubscribed = true;
+        // Close existing WebSocket connection before creating a new one
+        if (ws) {
+            ws.close();
+        }
+
         const websocket = new WebSocket(`ws://localhost:8080/ws`);
+
         websocket.onopen = () => {
-            setStatus('connected');
+            if (!isSubscribed) return;
+            setStatus('connecting'); // Set to connecting while joining
             websocket.send(JSON.stringify({
                 doc_id: docId,
                 user_id: userId,
@@ -35,29 +49,39 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
         };
 
         websocket.onclose = () => {
+            if (!isSubscribed) return;
             setStatus('disconnected');
         };
 
         websocket.onmessage = (event) => {
+            if (!isSubscribed) return;
             try {
-                const data:DocumentEvent = JSON.parse(event.data);
+                const data: DocumentEvent = JSON.parse(event.data);
                 if (data.content !== undefined) {
                     setContent(data.content);
                 }
                 if (data.version !== undefined) {
                     setVersion(data.version);
                 }
+                // Set connected status after successful join
+                setStatus('connected');
             } catch (error) {
                 console.error('Error processing message:', error);
             }
         };
 
+        websocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            setStatus('disconnected');
+        };
+
         setWs(websocket);
 
         return () => {
+            isSubscribed = false;
             websocket.close();
         };
-    }, [docId,version]);
+    }, [docId]); // Recreate WebSocket connection when docId changes
 
     const sendChange = useCallback((operation: string, position: number, length: number = 0, content: string = '') => {
         if (!ws) return;

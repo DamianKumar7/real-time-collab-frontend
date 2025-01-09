@@ -19,6 +19,7 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
     const wsRef = useRef<WebSocket | null>(null); // Ref to persist WebSocket instance
 
     // Logging helper
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const log = (message: string, ...data: any[]) => {
         console.log(`[DocumentEditor][docId=${docId}] ${message}`, ...data);
     };
@@ -54,7 +55,7 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
             try {
                 const data: DocumentEvent = JSON.parse(event.data);
                 if (data.content !== undefined) {
-                    setContent(data.content);
+                    setContent(initialContent+data.content);
                     log('Content updated from server', { content: data.content });
                 }
                 if (data.version !== undefined) {
@@ -98,8 +99,7 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
             log('Sending WebSocket message', { event });
             websocket.send(
                 JSON.stringify({
-                    id: '0',
-                    doc_id: docId,
+                    doc_id: String(docId),
                     user_id: userId,
                     timestamp: new Date().toISOString(),
                     ...event,

@@ -31,63 +31,61 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
 
     // Establish WebSocket connection once
     useEffect(() => {
-        if (!wsRef.current) {
-            log('Initializing WebSocket connection...');
-            const websocket = new WebSocket(`ws://localhost:8080/ws`);
-            wsRef.current = websocket;
+        log('Initializing WebSocket connection...');
+        const websocket = new WebSocket(`ws://localhost:8080/ws`);
+        wsRef.current = websocket;
 
-            websocket.onopen = () => {
-                log('WebSocket connection opened');
-                setStatus('connecting');
-                sendMessage({
-                    operation: 'join',
-                    position: 0,
-                    length: 0,
-                    content: '',
-                    version,
-                });
-            };
+        // Set connecting status immediately
+        setStatus('connecting');
 
-            websocket.onmessage = (event) => {
-                log('Received WebSocket message', event.data);
-                try {
-                    const data: DocumentEvent = JSON.parse(event.data);
-                    if (data.content !== undefined) {
-                        setContent(data.content);
-                        log('Content updated from server', { content: data.content });
-                    }
-                    if (data.version !== undefined) {
-                        setVersion(data.version);
-                        log('Version updated from server', { version: data.version });
-                    }
-                    setStatus('connected');
-                } catch (error) {
-                    console.error(`[DocumentEditor][docId=${docId}] Error processing WebSocket message`, error);
+        websocket.onopen = () => {
+            log('WebSocket connection opened');
+            setStatus('connected');  // Changed: Set connected here instead
+            sendMessage({
+                operation: 'join',  // Changed: Send a join operation first
+                doc_id: docId,
+                user_id: userId,
+                version: version
+            });
+        };
+
+        websocket.onmessage = (event) => {
+            log('Received WebSocket message', event.data);
+            try {
+                const data: DocumentEvent = JSON.parse(event.data);
+                if (data.content !== undefined) {
+                    setContent(data.content);
+                    log('Content updated from server', { content: data.content });
                 }
-            };
+                if (data.version !== undefined) {
+                    setVersion(data.version);
+                    log('Version updated from server', { version: data.version });
+                }
+            } catch (error) {
+                console.error(`[DocumentEditor][docId=${docId}] Error processing WebSocket message`, error);
+            }
+        };
 
-            websocket.onerror = (error) => {
-                console.error(`[DocumentEditor][docId=${docId}] WebSocket error`, error);
-                setStatus('disconnected');
-                websocket.close();
-                wsRef.current = null;
-            };
+        websocket.onerror = (error) => {
+            console.error(`[DocumentEditor][docId=${docId}] WebSocket error`, error);
+            setStatus('disconnected');
+        };
 
-            websocket.onclose = (event) => {
-                log('WebSocket connection closed', { code: event.code, reason: event.reason });
-                setStatus('disconnected');
-                wsRef.current = null;
-            };
+        websocket.onclose = (event) => {
+            log('WebSocket connection closed', { code: event.code, reason: event.reason });
+            setStatus('disconnected');
+            wsRef.current = null;
+        };
 
-            return () => {
+        // Cleanup function
+        return () => {
+            if (websocket.readyState === WebSocket.OPEN) {
                 log('Cleaning up WebSocket connection...');
                 websocket.close();
-                wsRef.current = null;
-            };
-        } else {
-            log('WebSocket connection already established');
-        }
-    }, [docId]); // Only recreate WebSocket when `docId` changes
+            }
+            wsRef.current = null;
+        };
+    }, [docId]); // Added userId and version to dependencies
 
     const sendMessage = useCallback(
         (event: Partial<DocumentEvent>) => {

@@ -43,8 +43,8 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
             log('WebSocket connection opened');
             setStatus('connected');  // Changed: Set connected here instead
             sendMessage({
-                operation: 'join',  // Changed: Send a join operation first
-                doc_id: docId,
+                operation: 'join',  
+                doc_id: String(docId),
                 user_id: userId,
                 version: version
             });

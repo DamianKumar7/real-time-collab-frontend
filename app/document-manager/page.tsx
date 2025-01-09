@@ -16,7 +16,7 @@ export default function DocumentManager() {
   const [selectedDocument, setSelectedDocument] = useState<DocumentModel | null>(null);
   const [token, setToken] = useState<string | null>(null);
     
-    const loggedIn = localStorage.getItem("token")
+  const loggedIn = localStorage.getItem("token")
     if (!loggedIn) {
         redirect('/login')
     }

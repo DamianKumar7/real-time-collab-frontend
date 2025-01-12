@@ -142,7 +142,7 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
             const diff = {
                 operation: 'insert',
                 position: i,
-                length: 0,
+                length: newContent.length - oldContent.length,
                 content: newContent.slice(i),
             };
             log('Detected insert operation', { diff });

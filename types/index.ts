@@ -29,6 +29,5 @@ export interface UserLoginResponse{
     username?: string;
     userId: string;
 }
-
 export type DocumentModel = BaseModel & Document;
 export type DocumentEventModel = BaseModel & DocumentEvent;

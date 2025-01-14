@@ -19,7 +19,9 @@ export default function DocumentManager() {
   const loggedIn = localStorage.getItem("token")
     if (!loggedIn) {
         redirect('/login')
-    }
+  }
+
+  const userId = localStorage.getItem("userId")
 
   // Effect to set token from localStorage
   useEffect(() => {
@@ -34,7 +36,7 @@ export default function DocumentManager() {
     try {
       const response = await fetch('http://localhost:8080/documents', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`
         },
       });
       if (!response.ok) throw new Error('Failed to fetch documents');
@@ -62,9 +64,9 @@ export default function DocumentManager() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`, // Add token to create request
+          'Authorization': `Bearer ${token}`, 
         },
-        body: JSON.stringify({ title: 'New Document', content: '', version: 1 }),
+        body: JSON.stringify({ title: 'New Document', content: '', version: 1,createdBy: userId }),
       });
 
       if (!response.ok) throw new Error('Failed to create document');

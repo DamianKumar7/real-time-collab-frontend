@@ -9,11 +9,12 @@ import { DocumentEvent } from '@/types';
 interface DocumentEditorProps {
     docId: string;
     initialContent?: string;
+    docVersion: number;
 }
 
-export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorProps) {
+export function DocumentEditor({ docId, initialContent = '', docVersion }: DocumentEditorProps) {
     const [content, setContent] = useState(initialContent);
-    const [version, setVersion] = useState(0);
+    const [version, setVersion] = useState(docVersion);
     const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
     const userId = localStorage.getItem('userId') || 'default';
     const wsRef = useRef<WebSocket | null>(null); // Ref to persist WebSocket instance
@@ -39,7 +40,7 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
         // Set connecting status immediately
         setStatus('connecting');
 
-        websocket.onopen = () => {
+            websocket.onopen = () => {
             log('WebSocket connection opened');
             setStatus('connected');  // Changed: Set connected here instead
             sendMessage({
@@ -55,7 +56,8 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
             try {
                 const data: DocumentEvent = JSON.parse(event.data);
                 if (data.content !== undefined) {
-                    setContent(initialContent+data.content);
+                    setContent(initialContent + data.content);
+                    console.log("after recieving message from the server the updated content of the document is : {}",content)
                     log('Content updated from server', { content: data.content });
                 }
                 if (data.version !== undefined) {
@@ -118,7 +120,9 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
     );
 
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        console.log("content is {}", content)
         const newContent = e.target.value;
+        console.log("The new content is {}",newContent)
         const diff = findDiff(content, newContent);
 
         if (diff) {
@@ -127,6 +131,7 @@ export function DocumentEditor({ docId, initialContent = '' }: DocumentEditorPro
         }
 
         setContent(newContent);
+        setVersion(version+1)
         log('Content updated locally', { newContent });
     };
 

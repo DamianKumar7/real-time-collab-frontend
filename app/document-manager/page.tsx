@@ -141,7 +141,8 @@ export default function DocumentManager() {
               <DocumentEditor
                     key={selectedDocument.ID} // Add this line
                     docId={selectedDocument.ID}
-                    initialContent={selectedDocument.content}
+               initialContent={selectedDocument.content}
+               docVersion={selectedDocument.version}
             />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
